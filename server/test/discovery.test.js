@@ -40,6 +40,34 @@ test('live mode needs ALLOW_LIVE, a gateway URL, https, and is never available w
   assert.equal(liveConfig(LIVE_ENV).origin, 'https://gw.example');
 });
 
+test('the owner-set gateway URL may be plain http only for a cluster-local service name; the gateway lane asks for gateway:mcp:invoke', () => {
+  const inCluster = 'http://ping-gateway:8080/mcp';
+  const ok = liveConfig({ ...LIVE_ENV, MUSE_LIVE_GATEWAY_URL: inCluster });
+  assert.equal(ok.url, inCluster);
+  assert.equal(ok.origin, 'http://ping-gateway:8080');
+  assert.ok(ok.allow.has('http://ping-gateway:8080'));
+  // The hosted real build (the SE shape) accepts it too.
+  const hosted = liveConfig({ ...LIVE_ENV, MUSE_HOSTED: '1', MUSE_ALLOW_LIVE_HOSTED: '1', MUSE_PUBLIC_URL: 'https://muse.example', MUSE_LIVE_GATEWAY_URL: inCluster });
+  assert.equal(hosted.origin, 'http://ping-gateway:8080');
+  // Anything with a dot (public host, IP address, service name under another domain) or not lowercase stays refused.
+  for (const bad of ['http://evil.example/mcp', 'http://10.0.0.1/mcp', 'http://ping-gateway.evil.example/mcp', 'http://Ping_Gateway:8080/mcp', 'ftp://ping-gateway/mcp']) {
+    assert.equal(liveConfig({ ...LIVE_ENV, MUSE_LIVE_GATEWAY_URL: bad }), null, bad);
+  }
+  // The exception is only for MUSE_LIVE_GATEWAY_URL itself: extra allowed origins stay https-only.
+  const extra = liveConfig({ ...LIVE_ENV, MUSE_LIVE_ALLOW_ORIGINS: 'http://other-svc:8080,https://ok.example' });
+  assert.ok(!extra.allow.has('http://other-svc:8080'));
+  assert.ok(extra.allow.has('https://ok.example'));
+  // https and loopback are unchanged.
+  assert.equal(liveConfig(LIVE_ENV).origin, 'https://gw.example');
+  assert.equal(liveConfig({ ...LIVE_ENV, MUSE_LIVE_GATEWAY_URL: 'http://127.0.0.1:9000/mcp' }).origin, 'http://127.0.0.1:9000');
+  // Lane switch: MUSE_P1_LANE=gateway picks the gateway scope, privilege picks mcp:invoke.
+  const P1 = { MUSE_P1_ENV_ID: 'env1', MUSE_P1_CLIENT_ID: 'c1', MUSE_P1_CLIENT_SECRET: 's' };
+  const gw = liveConfig({ ...LIVE_ENV, ...P1, MUSE_LIVE_GATEWAY_URL: inCluster, MUSE_P1_LANE: 'gateway' });
+  assert.equal(gw.idp.lane, 'gateway');
+  assert.equal(gw.idp.gatewayScope, 'gateway:mcp:invoke');
+  assert.equal(liveConfig({ ...LIVE_ENV, ...P1, MUSE_P1_LANE: 'privilege' }).idp.gatewayScope, 'mcp:invoke');
+});
+
 test('live discovery: 401, resource metadata, authorization-server metadata; http advert upgraded on the same host', async () => {
   const net = fakeNet(happy());
   const d = await liveDiscovery(liveConfig(LIVE_ENV), net.f);

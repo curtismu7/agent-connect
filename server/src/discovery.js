@@ -62,7 +62,10 @@ export function liveConfig(env) {
   let u;
   try { u = new URL(env.MUSE_LIVE_GATEWAY_URL); } catch { return null; }
   const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(u.hostname);
-  if (u.protocol !== 'https:' && !(loopback && u.protocol === 'http:')) return null;
+  // One exception to https-only: the owner-set gateway address may be plain http when its host is a cluster-local service name
+  // (no dots, so no public host and no IP address), for example http://ping-gateway:8080/mcp inside the cluster.
+  const clusterService = /^[a-z0-9-]{1,63}$/.test(u.hostname);
+  if (u.protocol !== 'https:' && !(u.protocol === 'http:' && (loopback || clusterService))) return null;
   const allow = new Set([u.origin]);
   for (const o of (env.MUSE_LIVE_ALLOW_ORIGINS ?? '').split(',').map((x) => x.trim()).filter(Boolean)) {
     try { const ou = new URL(o); if (ou.protocol === 'https:') allow.add(ou.origin); } catch { /* ignore */ }
