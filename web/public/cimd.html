@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CIMD examples: mock and real</title>
+<script>try{var t=localStorage.getItem('muse.theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);var f=Number(localStorage.getItem('muse.fs'));if([0.85,1.15,1.3,1.5].indexOf(f)>-1)document.documentElement.style.setProperty('--fs',String(f))}catch(e){}</script>
+<style>
+/* Layout: one column of short sections, one wide flow diagram, one facts table. Palette and type carried over from the first version. */
+:root {
+  --bg: #f5f5f2; --surface: #ffffff; --fg: #1d1f23; --muted: #5d636d;
+  --line: #dfe1dc; --control-border: #6f7c8a; --accent: #0a6e78; --accent-text: #ffffff; --accent-soft: #e3f0f1;
+  --ok: #1d6b35; --ok-soft: #e7f5ea; --warn: #8a5a00; --warn-soft: #fff6e0; --bad: #a1211c;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111317; --surface: #181b21; --fg: #e9ebef; --muted: #9aa0ab;
+    --line: #2a2f38; --control-border: #c3c8d0; --accent: #3fb4c0; --accent-text: #0b0d10; --accent-soft: #1b2b2e;
+    --ok: #6fd08c; --ok-soft: #17291d; --warn: #f0c060; --warn-soft: #2b2415; --bad: #ff8a80; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111317; --surface: #181b21; --fg: #e9ebef; --muted: #9aa0ab;
+  --line: #2a2f38; --control-border: #c3c8d0; --accent: #3fb4c0; --accent-text: #0b0d10; --accent-soft: #1b2b2e;
+  --ok: #6fd08c; --ok-soft: #17291d; --warn: #f0c060; --warn-soft: #2b2415; --bad: #ff8a80; color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); margin: 0; font: calc(18px * var(--fs, 1))/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: min(1600px, 96vw); margin: 0 auto; padding-block: 32px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 28px; }
+h1 { font-size: calc(33px * var(--fs, 1)); line-height: 1.2; margin: 0; text-wrap: balance; }
+h2 { font-size: calc(23px * var(--fs, 1)); margin: 0 0 8px; text-wrap: balance; }
+p, li { margin: 0; }
+ul, ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.lede { font-size: calc(21px * var(--fs, 1)); color: var(--muted); }
+.muted { color: var(--muted); font-size: calc(16px * var(--fs, 1)); }
+section { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; display: grid; gap: 12px; min-width: 0; }
+.note { border: 1px solid var(--line); border-left: 3px solid var(--warn); padding: 10px 14px; background: var(--surface); border-radius: 8px; font-size: calc(16px * var(--fs, 1)); }
+.wide { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: calc(16px * var(--fs, 1)); }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+.tag { display: inline-block; border: 1px solid currentColor; border-radius: 999px; padding: 0 8px; font-size: calc(14px * var(--fs, 1)); white-space: nowrap; }
+.sim { color: var(--warn); }
+.real { color: var(--ok); }
+.todo { color: var(--muted); }
+code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+svg { display: block; width: 100%; height: auto; min-width: 560px; }
+svg text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--fg); }
+svg .sub { fill: var(--muted); }
+svg .box { fill: var(--surface); stroke: var(--line); stroke-width: 1.4; }
+svg .you { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.4; }
+svg .ping { fill: var(--warn-soft); stroke: var(--warn); stroke-width: 1.4; }
+svg .done { fill: var(--ok-soft); stroke: var(--ok); stroke-width: 1.4; }
+svg .arrow { stroke: var(--muted); stroke-width: 1.6; fill: none; }
+svg .dash { stroke: var(--muted); stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+svg .head { fill: var(--muted); }
+a { color: var(--accent); }
+.back { max-width: min(1600px, 96vw); margin: 0 auto; padding: 16px max(16px, env(safe-area-inset-left, 0px)) 0; font-size: calc(16px * var(--fs, 1)); }
+.back { display: flex; justify-content: space-between; align-items: center; }
+.pdf-btn { font: inherit; font-size: calc(16px * var(--fs, 1)); color: var(--accent); background: var(--surface); border: 1px solid var(--control-border); border-radius: 8px; padding: 6px 14px; cursor: pointer; }
+.pdf-btn:hover { border-color: var(--accent); }
+@media print {
+  .back-actions, .ts { display: none; }
+  :root, :root:not([data-theme="light"]), :root[data-theme="dark"] {
+    --bg: #ffffff; --surface: #ffffff; --fg: #1d1f23; --muted: #5d636d; --line: #dfe1dc; --control-border: #6f7c8a; --accent: #0a6e78; --accent-text: #ffffff; --accent-soft: #e3f0f1;
+    --ok: #1d6b35; --ok-soft: #e7f5ea; --warn: #8a5a00; --warn-soft: #fff6e0; --bad: #a1211c; color-scheme: light;
+  }
+  .back { display: none; }
+  main { max-width: none; padding-block: 0; }
+  section, svg, table { break-inside: avoid; }
+}
+
+.ts { display: inline-flex; align-items: center; gap: 6px; margin-right: 8px; }
+.ts span { min-width: 3.2em; text-align: center; font-size: calc(14px * var(--fs, 1)); }
+
+pre { margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow-x: auto; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; }
+.step { border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 8px; min-width: 0; }
+.step:first-of-type { border-top: 0; padding-top: 0; }
+.step h3 { margin: 0; font-size: calc(19px * var(--fs, 1)); }
+.cap { color: var(--muted); font-size: calc(14px * var(--fs, 1)); margin-bottom: -4px; }
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.tabs button { font: inherit; font-size: calc(16px * var(--fs, 1)); color: var(--fg); background: var(--surface); border: 1px solid var(--control-border); border-radius: 8px; padding: 8px 16px; cursor: pointer; }
+.tabs button[aria-selected="true"] { border-color: var(--accent); background: var(--accent); color: var(--accent-text); font-weight: 600; }
+.js .panel[hidden] { display: none; }
+.panel { display: grid; gap: 20px; }
+.ok-t { color: var(--ok); } .bad-t { color: var(--bad); }
+</style>
+</head>
+<body>
+<p class="back"><a href="/how-muse-works.html#cimd">Back to How Muse works</a><span class="back-actions"><span class="ts" role="group" aria-label="Text size"><button type="button" class="pdf-btn" id="ts-dn" aria-label="Smaller text">A&minus;</button><span id="ts-now" aria-live="polite">100%</span><button type="button" class="pdf-btn" id="ts-up" aria-label="Larger text">A+</button></span> <button type="button" class="pdf-btn" id="theme-btn">Theme</button></span></p>
+<main>
+  <header>
+    <h1>CIMD, step by step: mock and real</h1>
+    <p class="lede">With a Client ID Metadata Document the app's <code>client_id</code> is a web address. The authorization server fetches that address, checks what it finds, and only then lets the sign-in go ahead. Below, every request and response, once as a labelled mock of what Muse's connector would do, and once as captured from real servers.</p>
+  </header>
+
+  <div class="tabs" role="tablist" aria-label="Example">
+    <button type="button" role="tab" id="t-real" aria-selected="true" aria-controls="p-real">Real: ChatGPT, Codex, Claude Code and Linear</button>
+    <button type="button" role="tab" id="t-mock" aria-selected="false" aria-controls="p-mock">Mock: what a server checks</button>
+  </div>
+
+  <div class="panel" id="p-real" role="tabpanel" aria-labelledby="t-real">
+    <section aria-labelledby="r-intro">
+      <h2 id="r-intro"><span class="tag real">Real</span> ChatGPT, Codex and Claude Code, against Linear and Notion</h2>
+      <p>Captured on 29 October 2026 from the public internet. The apps are the real ones: OpenAI hosts ChatGPT's and Codex's documents, Anthropic hosts Claude Code's. The servers are the real MCP servers of <a href="https://linear.app/">Linear</a> and <a href="https://www.notion.so/">Notion</a>, both of which advertise CIMD. Nothing here needed an account, because an authorize request only starts a sign-in.</p>
+      <p class="note">Not captured: what happens after Approve. That needs a signed-in Linear or Notion user, so the code and token steps are not shown on this tab.</p>
+    </section>
+
+    <section aria-labelledby="r1">
+      <div class="step">
+        <h3 id="r1">1. The three apps' own documents</h3>
+        <p class="cap">Request, no credentials, same for all three</p>
+<pre>GET /oauth/client.json HTTP/2                   Host: chatgpt.com
+GET /oauth/codex/client.json HTTP/2             Host: chatgpt.com
+GET /oauth/claude-code-client-metadata HTTP/2   Host: claude.ai</pre>
+        <p class="cap">ChatGPT: 200, <code>https://chatgpt.com/oauth/client.json</code></p>
+<pre>{
+  "client_id": "https://chatgpt.com/oauth/client.json",
+  "client_name": "ChatGPT",
+  "client_uri": "https://chatgpt.com/",
+  "logo_uri": "https://persistent.oaistatic.com/sonic/misc/openai-logo.png",
+  "redirect_uris": ["https://chatgpt.com/connector_platform_oauth_redirect"],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "private_key_jwt",
+  "token_endpoint_auth_methods_supported": ["none", "private_key_jwt"],
+  "token_endpoint_auth_signing_alg": "RS256",
+  "jwks_uri": "https://chatgpt.com/oauth/jwks.json"
+}</pre>
+        <p class="cap">Codex: 200, <code>https://chatgpt.com/oauth/codex/client.json</code></p>
+<pre>{
+  "client_id": "https://chatgpt.com/oauth/codex/client.json",
+  "client_name": "Codex",
+  "client_uri": "https://chatgpt.com/codex",
+  "application_type": "native",
+  "logo_uri": "https://persistent.oaistatic.com/sonic/misc/openai-logo.png",
+  "redirect_uris": ["http://127.0.0.1/callback", "http://localhost/callback"],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none",
+  "token_endpoint_auth_methods_supported": ["none"]
+}</pre>
+        <p class="cap">Claude Code: 200, <code>https://claude.ai/oauth/claude-code-client-metadata</code></p>
+<pre>{
+  "client_id": "https://claude.ai/oauth/claude-code-client-metadata",
+  "client_name": "Claude Code",
+  "client_uri": "https://claude.ai",
+  "redirect_uris": ["http://localhost/callback", "http://127.0.0.1/callback"],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none"
+}</pre>
+        <p>Two different kinds of client. Codex and Claude Code are public clients: no secret, PKCE only, a loopback callback with no port written in the document. <strong>ChatGPT is a confidential client</strong>: it asks for <code>private_key_jwt</code>, so it proves who it is at the token step by signing with a key published at its <code>jwks_uri</code>. (Its document also lists <code>none</code>.)</p>
+      </div>
+
+      <div class="step">
+        <h3 id="r2">2. A real server says it understands CIMD</h3>
+        <p class="cap">Request</p>
+<pre>GET /.well-known/oauth-authorization-server HTTP/2
+Host: mcp.linear.app</pre>
+        <p class="cap">Response (200, seven fields kept out of the full document)</p>
+<pre>{
+  "issuer": "https://mcp.linear.app",
+  "authorization_endpoint": "https://mcp.linear.app/authorize",
+  "token_endpoint": "https://mcp.linear.app/token",
+  "registration_endpoint": "https://mcp.linear.app/register",
+  "code_challenge_methods_supported": ["S256"],
+  "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post", "none"],
+  "client_id_metadata_document_supported": true
+}</pre>
+        <p>Linear also keeps its registration endpoint, so a client that has no document can still register (DCR). Notion's metadata is the same shape, with <code>private_key_jwt</code> added to the methods it accepts, the one ChatGPT asks for.</p>
+      </div>
+
+      <div class="step">
+        <h3 id="r3">3. ChatGPT asks Linear to sign someone in</h3>
+        <p class="cap">Request (the <code>code_challenge</code> is a sample)</p>
+<pre>GET /authorize
+  ?response_type=code
+  &amp;client_id=https://chatgpt.com/oauth/client.json
+  &amp;redirect_uri=https://chatgpt.com/connector_platform_oauth_redirect
+  &amp;code_challenge=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  &amp;code_challenge_method=S256&amp;state=x
+Host: mcp.linear.app</pre>
+        <p class="cap">Response</p>
+<pre>HTTP/2 200
+content-type: text/html; charset=UTF-8
+
+&lt;title&gt;ChatGPT | Authorization Request&lt;/title&gt;
+  (page preloads https://persistent.oaistatic.com/sonic/misc/openai-logo.png)
+  Website: https://chatgpt.com/
+  [ Approve ]</pre>
+        <p>Nobody registered ChatGPT with Linear. Linear fetched the document at the <code>client_id</code> address and built its consent page from it: the name in the title, OpenAI's logo from <code>logo_uri</code>, and the website from <code>client_uri</code>. The page is Linear's own, not ChatGPT's.</p>
+      </div>
+
+      <div class="step">
+        <h3 id="r4">4. Codex asks, with a callback port nobody listed</h3>
+        <p class="cap">Request</p>
+<pre>GET /authorize
+  ?response_type=code
+  &amp;client_id=https://chatgpt.com/oauth/codex/client.json
+  &amp;redirect_uri=http://127.0.0.1:1455/callback
+  &amp;code_challenge=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  &amp;code_challenge_method=S256&amp;state=x
+Host: mcp.linear.app</pre>
+        <p class="cap">Response</p>
+<pre>HTTP/2 200
+content-type: text/html; charset=UTF-8
+
+&lt;title&gt;Codex | Authorization Request&lt;/title&gt;
+  Website: https://chatgpt.com/codex
+  Callback: http://127.0.0.1:1455/callback
+  [ Approve ]</pre>
+        <p>The document lists <code>http://127.0.0.1/callback</code> with no port. Linear accepted port 1455 anyway. For a loopback address any port matches, because a command-line app picks a free port when it starts (Codex lets you fix it with <code>mcp_oauth_callback_port</code>). Linear shows the exact callback on its page.</p>
+      </div>
+
+      <div class="step">
+        <h3 id="r5">5. A callback the document does not list is refused</h3>
+        <p class="cap">Request: the same Codex request, with <code>redirect_uri=https://evil.example/cb</code></p>
+        <p class="cap">Linear</p>
+<pre>HTTP/2 400
+Invalid redirect URI</pre>
+        <p class="cap">Notion</p>
+<pre>HTTP/2 400
+{"error":"invalid_request","error_description":"Invalid redirect URI"}</pre>
+        <p>This is what stops anyone from borrowing ChatGPT's or Codex's address: a code is only ever sent to a callback in the document its owner published. Neither server redirected anywhere.</p>
+      </div>
+
+      <div class="step">
+        <h3 id="r6">6. Notion accepts the same two apps</h3>
+<pre>GET /authorize?client_id=https://chatgpt.com/oauth/client.json&amp;redirect_uri=https://chatgpt.com/connector_platform_oauth_redirect&amp;...
+Host: mcp.notion.com
+
+HTTP/2 302
+location: https://api.notion.com/v1/oauth/authorize?client_id=1f8d872b-594c-80a4-...&amp;redirect_uri=https%3A%2F%2Fmcp.notion.com%2Fcallback&amp;...</pre>
+        <p>The Codex request got the same 302. Notion accepted the client and handed the user on to api.notion.com with a Notion client ID and a callback back on mcp.notion.com. That looks like the MCP server acting as the authorization server the app talks to, and signing people in with Notion's own login behind it. That reading is my inference from the redirect, not something Notion documents here.</p>
+        <div class="wide">
+        <table>
+          <thead><tr><th>Server</th><th>Authorization server metadata, 29 Oct 2026</th><th>Authorize with ChatGPT and Codex documents</th></tr></thead>
+          <tbody>
+            <tr><td>Linear <code>mcp.linear.app</code></td><td><code>client_id_metadata_document_supported: true</code></td><td>Accepted (consent page). Unlisted callback refused.</td></tr>
+            <tr><td>Notion <code>mcp.notion.com</code></td><td>true, and <code>private_key_jwt</code> accepted</td><td>Accepted (302 to Notion sign-in). Unlisted callback refused.</td></tr>
+            <tr><td>Sentry, Vercel, Cloudflare, Canva, Monday, Shopify, WorkOS, Stytch</td><td>true</td><td>Not tried.</td></tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="r7">
+      <div class="step">
+        <h3 id="r7">7. Real PingFederate does it too (the CIMD server we use)</h3>
+        <p class="muted">Captured on the SE PingFederate on 29 October 2026 (the connector, read-only requests plus one owner-approved policy). Host names are replaced with <code>.example</code> names here; the responses are as captured.</p>
+        <p>PingFederate 13.1 added CIMD. The SE server (<code>pf.example</code>) and a local 13.1.3 both advertise <code>client_id_metadata_document_supported: true</code> and list <code>none</code> and <code>private_key_jwt</code>. Our Muse connector sits in front of PingOne, which has no CIMD, so Muse registers apps by DCR; <strong>PingFederate is where CIMD runs</strong>.</p>
+        <p><strong>Before a policy allowed the client: refused.</strong> The SE server had CIMD on and three policies, each allowing one exact metadata URL, with PKCE required. client.dev was in none of them, so PingFederate rejects the request:</p>
+<pre>GET /as/authorization.oauth2?client_id=https://client.dev/oauth/metadata.json&amp;response_type=code&amp;redirect_uri=https://client.dev/oauth/callback&amp;code_challenge=E9Melho...&amp;code_challenge_method=S256&amp;state=x
+Host: pf-local.example:9031
+
+HTTP/2 400
+400 - Invalid client_id</pre>
+        <p><strong>After one policy for client.dev only</strong> (owner-approved; the other three untouched): PingFederate fetches and validates <code>https://client.dev/oauth/metadata.json</code> and sends the client on to its sign-in page, a form titled "Sign in to Ping Identity AI demo" (HTTP 200).</p>
+        <p><strong>The same with our own hosted document</strong> (policy <code>cimdLabOwn</code>, a client document served from our own host): the same result, so PingFederate fetched it from the public internet.</p>
+        <p><strong>The trap worth knowing.</strong> A new access token manager with no <code>authz_req</code> mapping for the sign-in adapter makes PingFederate answer with a redirect to the client and an error. It looks like an authentication-selector problem and is not:</p>
+<pre>HTTP/2 302
+location: https://client.dev/oauth/callback?error=server_error&amp;error_description=There+are+no+authentication+methods+available+for+OAuth.&amp;state=x</pre>
+        <p>Adding the mapping on the token manager is the fix; the default authentication policy was already sending these requests to the sign-in form.</p>
+        <p class="note"><span class="tag todo">Open</span> Not captured: the authorization code itself, because it needs the demo user's password at the sign-in form. PingFederate acting as a CIMD <em>client</em> is unverified. The Acme PingFederate (<code>pf-acme.example</code>) does not advertise CIMD at all.</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="panel" id="p-mock" role="tabpanel" aria-labelledby="t-mock">
+    <section aria-labelledby="m-intro">
+      <h2 id="m-intro"><span class="tag sim">Mock</span> What a server does with a CIMD client_id</h2>
+      <p>This is scripted, not captured. It follows what Linear, Notion and PingFederate did on the Real tab, as a plain walk-through of the checks. Muse's own connector does not use CIMD: it sits in front of PingOne, which has none, so it registers apps by DCR. The app is Codex, using its real document from the other tab, so the shapes match. Codes, tokens and the PKCE values are samples. Codex needs only PKCE. ChatGPT's real document asks for <code>private_key_jwt</code>, so supporting ChatGPT would also mean fetching its key set and checking a signed assertion at the token step, which this walk-through does not show.</p>
+    </section>
+
+    <section aria-labelledby="m1">
+      <div class="step">
+        <h3 id="m1">1. The server advertises CIMD</h3>
+<pre>GET /.well-known/oauth-authorization-server
+Host: as.example
+
+200 OK
+{
+  "issuer": "https://as.example",
+  "authorization_endpoint": ".../authorize",
+  "token_endpoint": ".../token",
+  "code_challenge_methods_supported": ["S256"],
+  "token_endpoint_auth_methods_supported": ["none"],
+  "client_id_metadata_document_supported": true   <span class="bad-t">&lt;- the one new line</span>
+}</pre>
+      </div>
+
+      <div class="step">
+        <h3 id="m2">2. The app sends the user to authorize</h3>
+<pre>GET /authorize
+  ?client_id=https://chatgpt.com/oauth/codex/client.json
+  &amp;redirect_uri=http://127.0.0.1:1455/callback
+  &amp;response_type=code&amp;scope=mcp
+  &amp;code_challenge=SAMPLE_CHALLENGE&amp;code_challenge_method=S256&amp;state=SAMPLE_STATE</pre>
+        <p>A server without CIMD would answer 400 here, because that <code>client_id</code> is not registered. The new behaviour starts when the <code>client_id</code> is an HTTPS address.</p>
+      </div>
+
+      <div class="step">
+        <h3 id="m3">3. The server fetches and checks the document</h3>
+<pre>GET /oauth/codex/client.json
+Host: chatgpt.com
+Accept: application/json
+
+200 OK   (same body as the real capture)</pre>
+        <div class="wide">
+        <table>
+          <thead><tr><th>Check</th><th>Pass when</th><th>On failure</th></tr></thead>
+          <tbody>
+            <tr><td>Address</td><td>HTTPS, a real host, and the address does not resolve to a private or internal network</td><td><code>invalid_client</code>, nothing fetched</td></tr>
+            <tr><td>Fetch</td><td>Answers in a few seconds, small body, JSON</td><td><code>invalid_client</code></td></tr>
+            <tr><td>Same address</td><td>Document <code>client_id</code> equals the address it was fetched from</td><td><code>invalid_client</code></td></tr>
+            <tr><td>Callback</td><td>The request's <code>redirect_uri</code> is one of <code>redirect_uris</code>. For a loopback address any port matches.</td><td>400, no redirect (never send a code to an unlisted address)</td></tr>
+            <tr><td>Public client</td><td><code>token_endpoint_auth_method</code> is <code>none</code></td><td><code>invalid_client</code></td></tr>
+            <tr><td>Allow-list</td><td>The address is one the server trusts (a setting, like PingFederate's CIMD policy)</td><td><code>invalid_client</code></td></tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+
+      <div class="step">
+        <h3 id="m4">4. Sign-in goes ahead as it does today</h3>
+        <p>With the app accepted, the server shows its sign-in page (on PingFederate, the form from the Real tab). The user signs in and approves, then the server redirects to the callback the document listed:</p>
+<pre>302 Location: http://127.0.0.1:1455/callback?code=SAMPLE_CODE&amp;state=SAMPLE_STATE</pre>
+      </div>
+
+      <div class="step">
+        <h3 id="m5">5. The app swaps the code for a token</h3>
+<pre>POST /token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code&amp;code=SAMPLE_CODE
+&amp;client_id=https://chatgpt.com/oauth/codex/client.json
+&amp;redirect_uri=http://127.0.0.1:1455/callback
+&amp;code_verifier=SAMPLE_VERIFIER
+
+200 OK
+{ "access_token": "SAMPLE_TOKEN", "token_type": "Bearer", "scope": "mcp" }</pre>
+        <p>No client secret anywhere. PKCE proves the app that asked is the app that gets the token, and the document's callback list proves the code went where its owner said.</p>
+      </div>
+
+      <div class="step">
+        <h3 id="m6">6. Refusals worth showing</h3>
+        <div class="wide">
+        <table>
+          <thead><tr><th>Request</th><th>The server answers</th></tr></thead>
+          <tbody>
+            <tr><td><code>client_id=http://chatgpt.com/...</code> (not HTTPS)</td><td><code>invalid_client</code></td></tr>
+            <tr><td>Document says a different <code>client_id</code> than its address</td><td><code>invalid_client</code></td></tr>
+            <tr><td><code>redirect_uri=https://evil.example/cb</code>, not in the document</td><td>400 error page, no redirect</td></tr>
+            <tr><td><code>client_id</code> on a host that resolves to <code>127.0.0.1</code> or a cluster address</td><td><code>invalid_client</code>, never fetched</td></tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section aria-labelledby="after">
+    <h2 id="after">What each side does</h2>
+    <ul>
+      <li><span class="tag real">Real</span> ChatGPT, Codex and Claude Code host their own documents. Linear and Notion accept ChatGPT's and Codex's, and refuse a callback that is not in the document.</li>
+      <li><span class="tag real">Real</span> PingFederate 13.1.x advertises CIMD. It refused client.dev until a policy allowed it, then fetched and validated the document. The sign-in then failed on a missing token mapping, which is not CIMD.</li>
+      <li><span class="tag sim">Mock</span> The generic walk-through on the Mock tab. Muse's own connector does not do CIMD by design (PingOne has none); PingFederate does.</li>
+      <li><span class="tag todo">Open</span> The token step with a real signed-in user, for ChatGPT (<code>private_key_jwt</code>) and Codex. Whether ChatGPT falls back to <code>none</code> when a server lacks <code>private_key_jwt</code> is not verified.</li>
+    </ul>
+    <p class="note">PingFederate's CIMD support follows an evolving draft specification, and its documentation warns later changes may not be backward compatible. See <a href="https://docs.pingidentity.com/pingfederate/13.1/administrators_reference_guide/pf_cimd.html">PingFederate CIMD</a>.</p>
+  </section>
+</main>
+<script>
+(function(){document.documentElement.classList.add('js');var T=[['t-real','p-real'],['t-mock','p-mock']];
+function pick(i){T.forEach(function(x,j){var b=document.getElementById(x[0]),p=document.getElementById(x[1]);b.setAttribute('aria-selected',String(i===j));p.hidden=i!==j})}
+T.forEach(function(x,i){document.getElementById(x[0]).addEventListener('click',function(){pick(i)})});pick(0)})();
+</script>
+<script>
+(function(){var K='muse.theme',O=['system','light','dark'],L={system:'System',light:'Light',dark:'Dark'},b=document.getElementById('theme-btn');
+function cur(){try{var t=localStorage.getItem(K);return t==='light'||t==='dark'?t:'system'}catch(e){return 'system'}}
+function show(t){b.textContent='Theme: '+L[t];b.setAttribute('aria-label','Theme: '+L[t]+'. Click to change.')}
+show(cur());b.addEventListener('click',function(){var n=O[(O.indexOf(cur())+1)%3];if(n==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',n);try{if(n==='system')localStorage.removeItem(K);else localStorage.setItem(K,n)}catch(e){}show(n)})})();
+</script>
+<script>
+(function(){var S=[0.85,1,1.15,1.3,1.5],K='muse.fs',dn=document.getElementById('ts-dn'),up=document.getElementById('ts-up'),now=document.getElementById('ts-now');
+function cur(){try{var v=Number(localStorage.getItem(K));return S.indexOf(v)>-1?v:1}catch(e){return 1}}
+function show(v){now.textContent=Math.round(v*100)+'%';dn.disabled=v===S[0];up.disabled=v===S[S.length-1]}
+function set(v){document.documentElement.style.setProperty('--fs',String(v));try{if(v===1)localStorage.removeItem(K);else localStorage.setItem(K,String(v))}catch(e){}show(v)}
+show(cur());dn.addEventListener('click',function(){set(S[Math.max(0,S.indexOf(cur())-1)])});up.addEventListener('click',function(){set(S[Math.min(S.length-1,S.indexOf(cur())+1)])})})();
+</script>
+</body>
+</html>

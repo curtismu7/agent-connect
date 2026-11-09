@@ -1,0 +1,62 @@
+# Hosted build of Muse for the SE cluster (rule 18). MODE=mock (deploy.sh default) is the MOCK-ONLY build: live mode is refused
+# even if a Secret exists. MODE=live is the owner's real build: it reads the Secret `__NAME__-real` (see the README, "Hosted builds"), which
+# holds every tenant id, address and credential, so none of them are in this repo. Same image as the local standalone; MUSE_HOSTED=1
+# switches on the hosted banner, the Secure cookie and per-visitor workspaces. No secrets, no tenant ids, no volumes with data.
+# Placeholders (__IMAGE__, __SE_HOST__, __NAME__, __MODE__) are filled by k8s/deploy.sh. No namespace: deploy.sh takes NAMESPACE.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: __NAME__
+  labels: { app: __NAME__ }
+spec:
+  # ONE pod on purpose: workspaces live in this process's memory, so a second replica would give a visitor an empty workspace
+  # on every other request. Do not scale this without moving workspaces out of process.
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: __NAME__ }
+  template:
+    metadata:
+      labels: { app: __NAME__ }
+    spec:
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: app
+          image: __IMAGE__
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 5100 }
+          env:
+            - { name: MODE, value: __MODE__ }
+            - { name: MUSE_HOSTED, value: "1" }
+            - { name: PORT, value: "5100" }
+            - { name: MUSE_BIND, value: 0.0.0.0 }
+            # The browser's Origin must match the Host the app sees, so the ingress passes the real host through and the app names it here.
+            - { name: MUSE_ALLOWED_HOSTS, value: "__SE_HOST__" }
+            # A public link needs a visitor cap. Workspaces are per visitor and live in memory.
+            - { name: MUSE_MAX_WORKSPACES, value: "60" }
+          # Optional. Absent = the mock-only build. Present = real mode (ALLOW_LIVE, MUSE_ALLOW_LIVE_HOSTED, MUSE_PUBLIC_URL, MUSE_LIVE_GATEWAY_URL,
+          # MUSE_P1_ENV_ID, MUSE_P1_CLIENT_ID, MUSE_P1_CLIENT_SECRET, MUSE_P1_LANE). Created by the owner, never committed.
+          envFrom:
+            - secretRef: { name: __NAME__-real, optional: true }
+          readinessProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /api/health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
