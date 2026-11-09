@@ -5,6 +5,7 @@
 // answered by calling the gateway with the delegated token. Nothing here is on unless MUSE_CONNECTOR=1 and real mode is configured.
 import express from 'express';
 import { createHash, randomBytes } from 'node:crypto';
+import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { callGateway, delegate, exchangeCode, startSignIn } from './liveauth.js';
 import { SELF_MARK, simKeyOf } from './platforms.js';
 
@@ -76,6 +77,20 @@ const okRedirect = (uri, hosts, publicUrl) => {
   return hosts.some((x) => h === x || h.endsWith(`.${x}`));
 };
 
+// Stored as plain JSON, written to a temp file and renamed so a crash cannot leave a half-written file.
+function loadClients(file) {
+  const clients = new Map();
+  if (!file) return clients;
+  try { for (const [id, c] of Object.entries(JSON.parse(readFileSync(file, 'utf8')))) clients.set(id, c); } catch { /* no file yet, or unreadable: start empty */ }
+  return clients;
+}
+function saveClients(file, clients) {
+  if (!file) return;
+  const tmp = `${file}.tmp`;
+  writeFileSync(tmp, JSON.stringify(Object.fromEntries(clients)));
+  renameSync(tmp, file);
+}
+
 function capped(map) { while (map.size >= CAP) map.delete(map.keys().next().value); }
 
 export function mountConnector(app, { env, live, fetchImpl = fetch }) {
@@ -85,7 +100,8 @@ export function mountConnector(app, { env, live, fetchImpl = fetch }) {
   const signoutFirst = env.MUSE_CONNECTOR_SIGNOUT_FIRST === '1';
   const airline = (env.MUSE_CONNECTOR_AIRLINE ?? '').trim().slice(0, 40).replace(/[^\p{L}\p{N} .&'-]/gu, '');
   const TOOLS = toolsFor(airline);
-  const clients = new Map();   // client_id -> { redirectUris, name }
+  // Dynamic registrations. With MUSE_CLIENTS_FILE set they survive a restart: loaded here, and written after each registration.
+  const clients = loadClients(env.MUSE_CLIENTS_FILE);   // client_id -> { redirectUris, name }
   const pending = new Map();   // our state -> { client, redirectUri, state, challenge, verifier, at }
   const codes = new Map();     // our code -> { token, client, redirectUri, challenge, at }
   const tokens = new Map();    // access token -> { delegated, exp }
@@ -144,6 +160,7 @@ export function mountConnector(app, { env, live, fetchImpl = fetch }) {
     capped(clients);
     const id = `muse-${rand(12)}`;
     clients.set(id, { redirectUris: uris, name: String(req.body?.client_name ?? 'Agent').slice(0, 60) });
+    saveClients(env.MUSE_CLIENTS_FILE, clients);
     res.status(201).set('Cache-Control', 'no-store').json({ client_id: id, redirect_uris: uris, token_endpoint_auth_method: 'none', grant_types: ['authorization_code'], response_types: ['code'], client_name: clients.get(id).name });
   });
 
@@ -238,7 +255,13 @@ export function mountConnector(app, { env, live, fetchImpl = fetch }) {
         // Both tools read the airline passenger record (get_loyalty_status) through the gateway, so the balance and the status can never disagree.
         // The gateway sits behind a load balancer and now and then drops a connection; one retry covers it.
         const ask = () => callGateway(live, session.delegated, fetchImpl, { tool: 'get_loyalty_status' });
-        const steps = await ask().catch(() => ask());
+        const steps = await ask().catch((e) => { console.log(`[connector] gateway call failed once: ${e?.name}: ${e?.cause?.code ?? e?.message}`); return ask(); });
+        console.log(`[connector] gateway steps ${JSON.stringify(steps.map((x) => [x.n, x.skipped ? 'skipped' : x.response?.status ?? null]))}`);
+        // When a step is refused, say why: the error text only (for example an audience mismatch), never a token or the rest of the body.
+        for (const x of steps) {
+          const b = x.response?.body; const why = typeof b === 'object' && b ? (b.error_description ?? b.error?.message ?? b.error) : null;
+          if (x.response && x.response.status >= 400 && typeof why === 'string') console.log(`[connector] gateway step ${x.n} refused: ${why.replace(/\s+/g, ' ').slice(0, 300)}`);
+        }
         const resp = steps.find((s) => s.n === 9)?.response;
         const content = resp?.status === 200 ? resp.body?.result?.content : null;
         if (Array.isArray(content) && content.length) {
@@ -253,7 +276,7 @@ export function mountConnector(app, { env, live, fetchImpl = fetch }) {
           return rpc(id, { content: content.slice(0, 5).map((c) => ({ type: 'text', text: String(c.text ?? '').slice(0, 4000) })), isError: false });
         }
         return rpc(id, { content: [{ type: 'text', text: `The gateway did not allow or complete this call (${resp?.status ?? 'no answer'}).` }], isError: true });
-      } catch { return rpc(id, { content: [{ type: 'text', text: 'The gateway could not be reached.' }], isError: true }); }
+      } catch (e) { console.log(`[connector] gateway call failed: ${e?.name}: ${e?.cause?.code ?? e?.message}`); return rpc(id, { content: [{ type: 'text', text: 'The gateway could not be reached.' }], isError: true }); }
     }
     return id === undefined ? null : rpcErr(id, -32601, 'Method not found');
   }

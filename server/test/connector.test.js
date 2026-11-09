@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { createApp } from '../src/index.js';
@@ -32,6 +35,7 @@ function fakeNet(seen, drops = { n: 0 }) {
   return async (url, init) => {
     seen.push({ url: String(url), init });
     if (String(url) === GW && drops.n > 0) { drops.n -= 1; throw new Error('ECONNRESET'); }
+    if (String(url) === GW && drops.refuse) return json(drops.refuse.status, drops.refuse.body);
     if (String(url) === `${P1}/token`) {
       const f = new URLSearchParams(init.body);
       return json(200, { access_token: f.get('grant_type') === 'authorization_code' ? jwt({ aud: 'x', sub: 'sam' }) : DELEGATED });
@@ -403,4 +407,35 @@ test('with MUSE_CONNECTOR_SIGNOUT_FIRST the browser signs out of PingOne first, 
     assert.equal((await a.get('/connector/resume')).status, 400, 'no cookie, no resume');
     assert.equal((await a.get('/connector/resume', { headers: { cookie: 'muse_resume=nope' } })).status, 400, 'an unknown id never redirects');
   } finally { await a.close(); }
+});
+
+test('when the gateway refuses a step, the log says why (the error text only, no token)', async () => {
+  const lines = []; const orig = console.log; console.log = (...x) => { lines.push(x.join(' ')); };
+  const a = await boot();
+  try {
+    const { reg, verifier, back } = await signedIn(a);
+    const tj = await (await a.post('/connector/token', { grant_type: 'authorization_code', code: back.searchParams.get('code'), redirect_uri: REDIRECT, client_id: reg.client_id, code_verifier: verifier }, {}, true)).json();
+    a.drops.refuse = { status: 401, body: { jsonrpc: '2.0', id: 1, error: { code: -32001, message: 'Audience mismatch: got [aud-a], expected one of [aud-b]' } } };
+    const r = await a.post('/mcp', { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'loyalty_balance', arguments: {} } }, { authorization: `Bearer ${tj.access_token}` });
+    assert.equal((await r.json()).result.isError, true);
+  } finally { console.log = orig; await a.close(); }
+  const t = lines.join('\n');
+  assert.match(t, /gateway steps \[\[7,401\]\]/);
+  assert.match(t, /gateway step 7 refused: Audience mismatch: got \[aud-a\], expected one of \[aud-b\]/);
+  assert.doesNotMatch(t, /Bearer|eyJ|h\.[A-Za-z0-9_-]+\.s/);
+});
+
+test('with MUSE_CLIENTS_FILE, a registered client still works after the connector restarts', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'muse-clients-'));
+  const file = join(dir, 'clients.json');
+  const first = await boot({ MUSE_CLIENTS_FILE: file });
+  const reg = await (await first.post('/connector/register', { redirect_uris: [REDIRECT] })).json();
+  await first.close();
+  const { challenge } = pkce();
+  const q = new URLSearchParams({ response_type: 'code', client_id: reg.client_id, redirect_uri: REDIRECT, state: 'st', code_challenge: challenge, code_challenge_method: 'S256' });
+  const second = await boot({ MUSE_CLIENTS_FILE: file });
+  const again = await second.get(`/connector/authorize?${q}`);
+  await second.close();
+  assert.equal(again.status, 302);
+  assert.match(again.headers.get('location'), /authorize/, 'the restarted connector still knows the client');
 });
