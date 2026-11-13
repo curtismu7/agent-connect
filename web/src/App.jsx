@@ -4,8 +4,6 @@ import PatternFlow from './PatternFlow.jsx';
 import DiscoveryPanel from './DiscoveryPanel.jsx';
 import AssistantConnect from './AssistantConnect.jsx';
 import UserLoginPanel from './UserLoginPanel.jsx';
-import ThemeToggle from './ThemeToggle.jsx';
-import TextSize from './TextSize.jsx';
 import { parseIntent } from './intent.js';
 
 async function api(method, path, body) {
@@ -253,6 +251,10 @@ export default function App() {
   const decisions = session.decisions ?? [];
   const lastEntry = [...feed].reverse().find((m) => m.entry)?.entry ?? null;
 
+  const [tmTheme, setTmTheme] = useState(() => { try { return localStorage.getItem('ac.theme') || 'auto'; } catch { return 'auto'; } });
+  const [tmFont, setTmFont] = useState(() => { try { return localStorage.getItem('ac.font') || 'M'; } catch { return 'M'; } });
+  useEffect(() => { applyFontSize(tmFont); try { localStorage.setItem('ac.font', tmFont); } catch { /* blocked */ } }, [tmFont]);
+  useEffect(() => { if (tmTheme === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', tmTheme); try { localStorage.setItem('ac.theme', tmTheme); } catch { /* blocked */ } }, [tmTheme]);
   return (
     <main className={session.mode === 'live' ? 'app app--live' : 'app'}>
       {consentAsk && <ConsentModal ask={consentAsk} />}
@@ -261,7 +263,13 @@ export default function App() {
           <p className="page-band__eyebrow">Personal Agents</p>
           <h1>{session.customer?.brandName ?? 'Agent Connect'}</h1>
           <p className="page-band__summary">{session.customer?.agentName ?? 'Muse'} is a personal agent that asks first, gets a 401, sends you to PingOne to sign in, then acts on your behalf.</p>
-          <p className="page-band__links"><a href="/how-muse-works.html">How it works</a><a href="/how-muse-works.html#connect">How customers connect</a><a href="/clients.html">Claude, ChatGPT, Codex</a><a href="/diagram">Diagram</a><ThemeToggle className="on-band" /><TextSize className="on-band" /></p>
+          <p className="page-band__links"><a href="/how-muse-works.html">How it works</a><a href="/how-muse-works.html#connect">How customers connect</a><a href="/clients.html">Claude, ChatGPT, Codex</a><a href="/diagram">Diagram</a></p>
+        <TopMenu
+          theme={{ value: tmTheme, onChange: setTmTheme }}
+          fontSize={{ value: tmFont, onChange: setTmFont }}
+          present={{ active: presenter, onToggle: () => setPresenter(!presenter), label: 'Present' }}
+          version={null}
+        ></TopMenu>
         </div>
         {session.signedIn && (
           <div className="top-actions">

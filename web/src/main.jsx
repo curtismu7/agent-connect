@@ -6,6 +6,7 @@ import ThemeToggle, { applyTheme, readTheme } from './ThemeToggle.jsx';
 import TextSize from './TextSize.jsx';
 import { applySize, readSize } from './textsize.js';
 import './styles.css';
+import './top-menu/top-menu.css';
 
 applyTheme(readTheme());
 applySize(readSize());
