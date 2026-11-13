@@ -127,6 +127,10 @@ export default function App() {
   const [feed, setFeed] = useState([]);
   const [tab, setTab] = useState('activity');
   const [presenter, setPresenter] = useState(false);
+  const [tmTheme, setTmTheme] = useState(() => { try { return localStorage.getItem('ac.theme') || 'auto'; } catch { return 'auto'; } });
+  const [tmFont, setTmFont] = useState(() => { try { return localStorage.getItem('ac.font') || 'M'; } catch { return 'M'; } });
+  useEffect(() => { applyFontSize(tmFont); try { localStorage.setItem('ac.font', tmFont); } catch { /* blocked */ } }, [tmFont]);
+  useEffect(() => { if (tmTheme === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', tmTheme); try { localStorage.setItem('ac.theme', tmTheme); } catch { /* blocked */ } }, [tmTheme]);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState('');
@@ -252,10 +256,6 @@ export default function App() {
   const decisions = session.decisions ?? [];
   const lastEntry = [...feed].reverse().find((m) => m.entry)?.entry ?? null;
 
-  const [tmTheme, setTmTheme] = useState(() => { try { return localStorage.getItem('ac.theme') || 'auto'; } catch { return 'auto'; } });
-  const [tmFont, setTmFont] = useState(() => { try { return localStorage.getItem('ac.font') || 'M'; } catch { return 'M'; } });
-  useEffect(() => { applyFontSize(tmFont); try { localStorage.setItem('ac.font', tmFont); } catch { /* blocked */ } }, [tmFont]);
-  useEffect(() => { if (tmTheme === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', tmTheme); try { localStorage.setItem('ac.theme', tmTheme); } catch { /* blocked */ } }, [tmTheme]);
   return (
     <main className={session.mode === 'live' ? 'app app--live' : 'app'}>
       {consentAsk && <ConsentModal ask={consentAsk} />}
