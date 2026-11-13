@@ -5,6 +5,7 @@ import DiscoveryPanel from './DiscoveryPanel.jsx';
 import AssistantConnect from './AssistantConnect.jsx';
 import UserLoginPanel from './UserLoginPanel.jsx';
 import { parseIntent } from './intent.js';
+import TopMenu, { applyFontSize } from './top-menu/TopMenu.jsx';
 
 async function api(method, path, body) {
   const res = await fetch(path, {
